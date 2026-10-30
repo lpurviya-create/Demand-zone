@@ -61,7 +61,7 @@ input[type=search],select{flex:1;min-width:0;border:1px solid var(--line);border
   <div class="logo">DZ</div>
   <div><h1>Demand Zone Scanner</h1><small id="sub">Scanner Excel viewer</small></div>
   <div class="sp"></div>
-  <button class="btn ghost" id="loadTop">Excel Load</button>
+  <label class="btn ghost" id="loadTop" for="f">Excel Load</label>
 </header>
 
 <div id="empty">
@@ -72,7 +72,7 @@ input[type=search],select{flex:1;min-width:0;border:1px solid var(--line);border
     3. Niche <b>Excel File Load Karein</b> dabao aur file chuno (dono ek saath bhi chun sakte ho).<br>
     4. Data phone me save ho jata hai, agli baar internet ya file ki zarurat nahi.
   </div>
-  <button class="btn big" id="loadBig">Excel File Load Karein</button>
+  <label class="btn big" id="loadBig" for="f" style="display:block;text-align:center">Excel File Load Karein</label>
   <div class="hint">Scan phone par nahi chalta, ye sirf scanner ke result dikhata hai.</div>
 </div>
 
@@ -88,7 +88,8 @@ input[type=search],select{flex:1;min-width:0;border:1px solid var(--line);border
   <button class="btn" id="moreBtn">Aur dikhao</button>
 </div>
 
-<input type="file" id="f" accept=".xlsx,.xls,.xlsm" multiple hidden>
+<input type="file" id="f" multiple style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
+<div id="msg" style="display:none;position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:20;background:#7f1d1d;color:#fff;border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.45"></div>
 
 <script>
 /*! xlsx.js (C) 2013-present SheetJS -- http://sheetjs.com */
@@ -136,29 +137,38 @@ function buildTabs(){
 }
 
 /* ---------- file loading ---------- */
+function showMsg(t,ok){var m=$('#msg');m.style.background=ok?'#14532d':'#7f1d1d';m.textContent=t;m.style.display=t?'block':'none'}
+function readBuf(file){
+  if(file.arrayBuffer)return file.arrayBuffer();
+  return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(r.result)};r.onerror=function(){rej(r.error||new Error('read error'))};r.readAsArrayBuffer(file)});
+}
 function readFile(file){
-  return file.arrayBuffer().then(function(buf){
-    var wb=XLSX.read(buf,{type:'array'});
-    var sheets={};
-    wb.SheetNames.forEach(function(n){
-      var rows=XLSX.utils.sheet_to_json(wb.Sheets[n],{defval:''});
-      if(rows.length)sheets[n]=rows;
+  return readBuf(file).then(function(buf){
+    var wb;
+    try{wb=XLSX.read(new Uint8Array(buf),{type:'array'})}catch(e){throw new Error(file.name+': Excel file nahi hai ya kharab hai')}
+    var sheets={}, n=0;
+    wb.SheetNames.forEach(function(nm){
+      var rows=XLSX.utils.sheet_to_json(wb.Sheets[nm],{defval:''});
+      if(rows.length){sheets[nm]=rows;n+=rows.length}
     });
+    if(!n)throw new Error(file.name+': isme koi data row nahi mili (scanner ne zone nahi diye?)');
     return {name:file.name,kind:/supply/i.test(file.name)?'S':'D',loadedAt:new Date().toISOString(),sheets:sheets};
   });
 }
 function loadFiles(list){
   var arr=Array.prototype.slice.call(list); if(!arr.length)return;
-  $('#sub').textContent='Load ho raha hai...';
+  showMsg('Load ho raha hai: '+arr.map(function(f){return f.name}).join(', '),true);
   Promise.all(arr.map(readFile)).then(function(res){
     res.forEach(function(r){
-      files=files.filter(function(f){return f.kind!==r.kind});   // same type ki nayi file purani ko replace kare
+      files=files.filter(function(f){return f.kind!==r.kind});
       files.push(r);
     });
+    cur=0;status='ALL';render();
+    showMsg('Load ho gaya: '+res.length+' file',true);
+    setTimeout(function(){showMsg('')},2500);
     return kvSet('files',files);
-  }).then(function(){cur=0;status='ALL';render()}).catch(function(e){
-    $('#sub').textContent='Scanner Excel viewer';
-    alert('File padh nahi paaye. Scanner wali .xlsx file hi chuno.\n'+(e&&e.message||''));
+  }).catch(function(e){
+    showMsg('Error: '+(e&&e.message||e));
   });
 }
 
@@ -230,7 +240,7 @@ function list(){
 
 /* ---------- events ---------- */
 function pick(){$('#f').click()}
-$('#loadTop').onclick=pick; $('#loadBig').onclick=pick;
+
 $('#f').onchange=function(e){loadFiles(e.target.files);e.target.value=''};
 $('#tabs').onclick=function(e){var b=e.target.closest('.tab');if(!b)return;cur=+b.dataset.i;status='ALL';virgin=false;strong=false;$('#q').value='';render()};
 $('#chips').onclick=function(e){
